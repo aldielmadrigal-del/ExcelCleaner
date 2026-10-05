@@ -1,0 +1,11 @@
+﻿__pycache__/
+*.pyc
+
+uploads/
+
+frontend/node_modules/
+frontend/dist/
+
+app_backup.txt
+
+examples/*.xlsx
