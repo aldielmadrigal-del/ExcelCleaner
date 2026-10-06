@@ -1,6 +1,7 @@
 ﻿from flask import request, jsonify, send_file
 from analyzer import analyze_file
 from cleaner import clean_file
+from storage import upload_file, download_file, delete_file
 import os
 import uuid
 
@@ -46,9 +47,22 @@ def register_api(app, upload_folder):
             output_filename
         )
 
+        input_object = (
+            f"uploads/{input_filename}"
+        )
+
+        output_object = (
+            f"cleaned/{output_filename}"
+        )
+
         try:
 
             file.save(input_path)
+
+            upload_file(
+                input_path,
+                input_object
+            )
 
             result = analyze_file(
                 input_path
@@ -61,6 +75,11 @@ def register_api(app, upload_folder):
                     output_path
                 )
 
+                upload_file(
+                    output_path,
+                    output_object
+                )
+
                 result["download_id"] = file_id
 
             return jsonify(result)
@@ -70,6 +89,14 @@ def register_api(app, upload_folder):
             return jsonify({
                 "error": str(e)
             }), 500
+
+        finally:
+
+            if os.path.isfile(input_path):
+                os.remove(input_path)
+
+            if os.path.isfile(output_path):
+                os.remove(output_path)
 
 
     @app.route(
@@ -83,33 +110,38 @@ def register_api(app, upload_folder):
                 "error": "Archivo no especificado."
             }), 400
 
-        filename = (
-            f"{file_id}_cleaned.xlsx"
-        )
+        for extension in [".xlsx", ".xls", ".csv"]:
 
-        file_path = os.path.join(
-            upload_folder,
-            filename
-        )
+            output_filename = (
+                f"{file_id}_cleaned{extension}"
+            )
 
-        if not os.path.isfile(file_path):
+            output_object = (
+                f"cleaned/{output_filename}"
+            )
 
-            csv_path = os.path.join(
+            local_path = os.path.join(
                 upload_folder,
-                f"{file_id}_cleaned.csv"
+                output_filename
             )
 
-            if os.path.isfile(csv_path):
-                file_path = csv_path
-            else:
-                return jsonify({
-                    "error": "Archivo no encontrado."
-                }), 404
+            try:
 
-        return send_file(
-            file_path,
-            as_attachment=True,
-            download_name=os.path.basename(
-                file_path
-            )
-        )
+                download_file(
+                    output_object,
+                    local_path
+                )
+
+                return send_file(
+                    local_path,
+                    as_attachment=True,
+                    download_name=output_filename
+                )
+
+            except Exception:
+                if os.path.isfile(local_path):
+                    os.remove(local_path)
+
+        return jsonify({
+            "error": "Archivo no encontrado."
+        }), 404
