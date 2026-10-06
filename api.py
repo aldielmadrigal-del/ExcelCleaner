@@ -1,7 +1,7 @@
 ﻿from flask import request, jsonify, send_file
 from analyzer import analyze_file
 from cleaner import clean_file
-from storage import upload_file, download_file, delete_file
+from storage import upload_file, download_file
 import os
 import uuid
 
@@ -47,22 +47,17 @@ def register_api(app, upload_folder):
             output_filename
         )
 
-        input_object = (
-            f"uploads/{input_filename}"
+        original_object = (
+            f"original/{input_filename}"
         )
 
-        output_object = (
+        cleaned_object = (
             f"cleaned/{output_filename}"
         )
 
         try:
 
             file.save(input_path)
-
-            upload_file(
-                input_path,
-                input_object
-            )
 
             result = analyze_file(
                 input_path
@@ -77,10 +72,19 @@ def register_api(app, upload_folder):
 
                 upload_file(
                     output_path,
-                    output_object
+                    cleaned_object
                 )
 
                 result["download_id"] = file_id
+
+            else:
+
+                upload_file(
+                    input_path,
+                    original_object
+                )
+
+                result["file_id"] = file_id
 
             return jsonify(result)
 
@@ -116,7 +120,7 @@ def register_api(app, upload_folder):
                 f"{file_id}_cleaned{extension}"
             )
 
-            output_object = (
+            cleaned_object = (
                 f"cleaned/{output_filename}"
             )
 
@@ -128,7 +132,7 @@ def register_api(app, upload_folder):
             try:
 
                 download_file(
-                    output_object,
+                    cleaned_object,
                     local_path
                 )
 
@@ -139,9 +143,68 @@ def register_api(app, upload_folder):
                 )
 
             except Exception:
+
                 if os.path.isfile(local_path):
                     os.remove(local_path)
 
         return jsonify({
             "error": "Archivo no encontrado."
         }), 404
+
+
+    @app.route("/payment/success", methods=["GET"])
+    def payment_success():
+
+        return """
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <title>Pago completado</title>
+        </head>
+        <body>
+            <h1>Pago completado</h1>
+            <p>Tu pago fue recibido correctamente.</p>
+            <p>Estamos preparando tu archivo.</p>
+        </body>
+        </html>
+        """
+
+
+    @app.route("/payment/cancel", methods=["GET"])
+    def payment_cancel():
+
+        return """
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <title>Pago cancelado</title>
+        </head>
+        <body>
+            <h1>Pago cancelado</h1>
+            <p>El pago no fue completado.</p>
+            <p>Tu archivo original permanece guardado temporalmente.</p>
+        </body>
+        </html>
+        """
+
+
+    @app.route(
+        "/api/qvapay/webhook",
+        methods=["POST"]
+    )
+    def qvapay_webhook():
+
+        data = request.get_json(
+            silent=True
+        )
+
+        if not data:
+            return jsonify({
+                "error": "Solicitud inválida."
+            }), 400
+
+        return jsonify({
+            "received": True
+        }), 200
