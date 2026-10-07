@@ -169,6 +169,7 @@ function columnLetter(number) {
     while (number > 0) {
 
         number--
+
         result =
             String.fromCharCode(
                 65 + (number % 26)
@@ -182,7 +183,10 @@ function columnLetter(number) {
 }
 
 
-function buildSheetData(sheet, mode) {
+function buildSheetData(
+    sheet,
+    mode
+) {
 
     const rows =
         mode === 'before'
@@ -191,27 +195,32 @@ function buildSheetData(sheet, mode) {
 
     const cellData = {}
 
-    rows.forEach((row, rowIndex) => {
+    rows.forEach(
+        (row, rowIndex) => {
 
-        cellData[rowIndex] = {}
+            cellData[rowIndex] = {}
 
-        row.cells.forEach(
-            (cell, columnIndex) => {
+            row.cells.forEach(
+                (cell, columnIndex) => {
 
-                cellData[rowIndex][columnIndex] = {
-                    v: cell.value
+                    cellData[rowIndex][columnIndex] = {
+                        v: cell.value
+                    }
+
                 }
+            )
 
-            }
-        )
-
-    })
+        }
+    )
 
     return cellData
 }
 
 
-function buildWorkbook(result, mode) {
+function buildWorkbook(
+    result,
+    mode
+) {
 
     const sheets = {}
     const sheetOrder = []
@@ -222,7 +231,9 @@ function buildWorkbook(result, mode) {
             const sheetId =
                 `sheet-${mode}-${sheetIndex}`
 
-            sheetOrder.push(sheetId)
+            sheetOrder.push(
+                sheetId
+            )
 
             const rows =
                 mode === 'before'
@@ -243,9 +254,11 @@ function buildWorkbook(result, mode) {
 
             sheets[sheetId] = {
 
-                id: sheetId,
+                id:
+                    sheetId,
 
-                name: sheet.name,
+                name:
+                    sheet.name,
 
                 rowCount:
                     Math.max(
@@ -400,7 +413,117 @@ function createViewer(
 }
 
 
-function buildChangeSummary(result) {
+async function createQvaPayInvoice(
+    fileId,
+    amount,
+    button
+) {
+
+    button.disabled =
+        true
+
+    button.textContent =
+        'Creando pago...'
+
+    status.textContent =
+        'Preparando el pago...'
+
+
+    try {
+
+        const response =
+            await fetch(
+                '/api/qvapay/create-invoice',
+                {
+
+                    method:
+                        'POST',
+
+                    headers: {
+                        'Content-Type':
+                            'application/json'
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            file_id:
+                                fileId,
+
+                            amount:
+                                amount
+
+                        })
+
+                }
+            )
+
+
+        let data
+
+        try {
+
+            data =
+                await response.json()
+
+        } catch {
+
+            throw new Error(
+                'El servidor devolvió una respuesta inválida.'
+            )
+
+        }
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                'No se pudo crear el pago.'
+            )
+
+        }
+
+
+        if (
+            !data.payment_url
+        ) {
+
+            throw new Error(
+                'QvaPay no devolvió una URL de pago.'
+            )
+
+        }
+
+
+        status.textContent =
+            'Redirigiendo a QvaPay...'
+
+
+        window.location.href =
+            data.payment_url
+
+    } catch (error) {
+
+        console.error(error)
+
+        button.disabled =
+            false
+
+        button.textContent =
+            'Continuar al pago'
+
+        status.textContent =
+            `Error: ${error.message}`
+
+    }
+
+}
+
+
+function buildChangeSummary(
+    result
+) {
 
     let whitespace = 0
     let duplicates = 0
@@ -547,68 +670,97 @@ function buildChangeSummary(result) {
         )
 
 
-    if (priceSection) {
-
-        priceSection.innerHTML = `
-
-            <div class="price-box">
-
-                <div>
-
-                    <span class="price-label">
-                        Precio de limpieza
-                    </span>
-
-                    <strong class="price-value">
-                        $${result.price}
-                    </strong>
-
-                </div>
+    if (!priceSection) {
+        return
+    }
 
 
-                <button
-                    id="continue-payment-button"
-                    type="button"
-                >
+    priceSection.innerHTML = `
 
-                    ${
-                        result.price === 0
-                            ? 'Descargar archivo limpio'
-                            : 'Continuar al pago'
-                    }
+        <div class="price-box">
 
-                </button>
+            <div>
+
+                <span class="price-label">
+                    Precio de limpieza
+                </span>
+
+                <strong class="price-value">
+                    $${result.price}
+                </strong>
 
             </div>
 
-        `
 
+            <button
+                id="continue-payment-button"
+                type="button"
+            >
 
-        const downloadButton =
-            document.querySelector(
-                '#continue-payment-button'
-            )
-
-
-        if (
-            downloadButton &&
-            result.price === 0 &&
-            result.download_id
-        ) {
-
-            downloadButton.addEventListener(
-                'click',
-                () => {
-
-                    window.location.href =
-                        `/api/download/${encodeURIComponent(
-                            result.download_id
-                        )}`
-
+                ${
+                    result.price === 0
+                        ? 'Descargar archivo limpio'
+                        : 'Continuar al pago'
                 }
-            )
 
-        }
+            </button>
+
+        </div>
+
+    `
+
+
+    const paymentButton =
+        document.querySelector(
+            '#continue-payment-button'
+        )
+
+
+    if (
+        !paymentButton
+    ) {
+        return
+    }
+
+
+    if (
+        result.price === 0 &&
+        result.download_id
+    ) {
+
+        paymentButton.addEventListener(
+            'click',
+            () => {
+
+                window.location.href =
+                    `/api/download/${encodeURIComponent(
+                        result.download_id
+                    )}`
+
+            }
+        )
+
+        return
+    }
+
+
+    if (
+        result.price > 0 &&
+        result.file_id
+    ) {
+
+        paymentButton.addEventListener(
+            'click',
+            () => {
+
+                createQvaPayInvoice(
+                    result.file_id,
+                    result.price,
+                    paymentButton
+                )
+
+            }
+        )
 
     }
 
@@ -635,7 +787,9 @@ function showViewer(
         } cambio(s)`
 
 
-    buildChangeSummary(result)
+    buildChangeSummary(
+        result
+    )
 
 
     const beforeAPI =
@@ -664,25 +818,29 @@ function showViewer(
 
         (event) => {
 
-            if (changingSheet) {
+            if (
+                changingSheet
+            ) {
+
                 return
+
             }
+
 
             const sheetId =
                 event.sheetId
 
-            changingSheet = true
+
+            changingSheet =
+                true
+
 
             try {
-
-                afterAPI
-                    .getActiveWorkbook()
-                    .getActiveSheet()
-                    .activate()
 
                 const workbook =
                     afterAPI
                         .getActiveWorkbook()
+
 
                 const sheet =
                     workbook
@@ -693,8 +851,11 @@ function showViewer(
                             )
                         )
 
+
                 if (sheet) {
+
                     sheet.activate()
+
                 }
 
             } finally {
@@ -715,20 +876,29 @@ function showViewer(
 
         (event) => {
 
-            if (changingSheet) {
+            if (
+                changingSheet
+            ) {
+
                 return
+
             }
+
 
             const sheetId =
                 event.sheetId
 
-            changingSheet = true
+
+            changingSheet =
+                true
+
 
             try {
 
                 const workbook =
                     beforeAPI
                         .getActiveWorkbook()
+
 
                 const sheet =
                     workbook
@@ -739,8 +909,11 @@ function showViewer(
                             )
                         )
 
+
                 if (sheet) {
+
                     sheet.activate()
+
                 }
 
             } finally {
@@ -799,11 +972,13 @@ analyzeButton.addEventListener(
                 await fetch(
                     '/api/analyze',
                     {
+
                         method:
                             'POST',
 
                         body:
                             formData
+
                     }
                 )
 
@@ -832,10 +1007,8 @@ analyzeButton.addEventListener(
 
             console.error(error)
 
-
             status.textContent =
                 `Error: ${error.message}`
-
 
             analyzeButton.disabled =
                 false

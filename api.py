@@ -4,6 +4,10 @@ from cleaner import clean_file
 from storage import upload_file, download_file
 import os
 import uuid
+import requests
+
+
+QVAPAY_API_URL = "https://api.qvapay.com"
 
 
 def register_api(app, upload_folder):
@@ -150,6 +154,128 @@ def register_api(app, upload_folder):
         return jsonify({
             "error": "Archivo no encontrado."
         }), 404
+
+
+    @app.route(
+        "/api/qvapay/create-invoice",
+        methods=["POST"]
+    )
+    def qvapay_create_invoice():
+
+        app_id = os.getenv("QVAPAY_APP_ID")
+        app_secret = os.getenv("QVAPAY_APP_SECRET")
+
+        if not app_id:
+            return jsonify({
+                "error": "Falta QVAPAY_APP_ID."
+            }), 500
+
+        if not app_secret:
+            return jsonify({
+                "error": "Falta QVAPAY_APP_SECRET."
+            }), 500
+
+        data = request.get_json(
+            silent=True
+        )
+
+        if not data:
+            return jsonify({
+                "error": "Solicitud inválida."
+            }), 400
+
+        file_id = data.get("file_id")
+        amount = data.get("amount")
+
+        if not file_id:
+            return jsonify({
+                "error": "Falta file_id."
+            }), 400
+
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+
+            return jsonify({
+                "error": "El monto no es válido."
+            }), 400
+
+        if amount <= 0:
+            return jsonify({
+                "error": "El monto debe ser mayor que 0."
+            }), 400
+
+        remote_id = f"excelcleaner-{file_id}"
+
+        payload = {
+            "amount": amount,
+            "description": "Limpieza de archivo Excel/CSV",
+            "remote_id": remote_id,
+            "webhook": (
+                "https://excelcleaner.onrender.com/"
+                "api/qvapay/webhook"
+            ),
+            "products": [
+                {
+                    "name": "Limpieza de archivo Excel/CSV",
+                    "price": amount,
+                    "quantity": 1
+                }
+            ]
+        }
+
+        try:
+
+            response = requests.post(
+                f"{QVAPAY_API_URL}/v2/create_invoice",
+                headers={
+                    "Content-Type": "application/json",
+                    "app-id": app_id,
+                    "app-secret": app_secret
+                },
+                json=payload,
+                timeout=20
+            )
+
+            try:
+                qvapay_data = response.json()
+            except ValueError:
+
+                return jsonify({
+                    "error": (
+                        "QvaPay devolvió una respuesta "
+                        "que no es JSON."
+                    )
+                }), 502
+
+            if response.status_code != 200:
+
+                return jsonify({
+                    "error": "QvaPay rechazó la factura.",
+                    "qvapay": qvapay_data
+                }), response.status_code
+
+            return jsonify({
+                "success": True,
+                "file_id": file_id,
+                "transaction_uuid": (
+                    qvapay_data.get(
+                        "transaction_uuid"
+                    )
+                ),
+                "payment_url": (
+                    qvapay_data.get("url")
+                )
+            }), 200
+
+        except requests.RequestException as e:
+
+            return jsonify({
+                "error": (
+                    "No se pudo conectar con QvaPay."
+                ),
+                "details": str(e)
+            }), 502
 
 
     @app.route("/payment/success", methods=["GET"])
