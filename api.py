@@ -279,6 +279,34 @@ def process_paid_file(file_id, upload_folder):
             os.remove(output_path)
 
 
+def calculate_order_price(upload_folder, file_id):
+    original_result = find_original_file(
+        upload_folder,
+        file_id
+    )
+
+    if not original_result:
+        raise FileNotFoundError(
+            "No se encontró el archivo original "
+            "del pedido."
+        )
+
+    (
+        extension,
+        original_object,
+        input_path
+    ) = original_result
+
+    try:
+        result = analyze_file(input_path)
+
+        return result["price"]
+
+    finally:
+        if os.path.isfile(input_path):
+            os.remove(input_path)
+
+
 def register_api(app, upload_folder):
 
     @app.route(
@@ -471,7 +499,6 @@ def register_api(app, upload_folder):
             }), 400
 
         file_id = data.get("file_id")
-        amount = data.get("amount")
 
         if not file_id:
             return jsonify({
@@ -480,17 +507,26 @@ def register_api(app, upload_folder):
             }), 400
 
         try:
-            amount = float(amount)
-        except (TypeError, ValueError):
+            amount = calculate_order_price(
+                upload_folder,
+                file_id
+            )
+
+        except FileNotFoundError as e:
+            return jsonify({
+                "error": str(e)
+            }), 404
+
+        except Exception as e:
             return jsonify({
                 "error":
-                    "El monto no es válido."
-            }), 400
+                    f"No se pudo calcular el precio real: {e}"
+            }), 500
 
         if amount <= 0:
             return jsonify({
                 "error":
-                    "El monto debe ser mayor que 0."
+                    "Este archivo no requiere pago."
             }), 400
 
         remote_id = (
