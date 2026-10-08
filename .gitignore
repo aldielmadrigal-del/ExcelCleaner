@@ -9,3 +9,5 @@ frontend/dist/
 app_backup.txt
 
 examples/*.xlsx
+wallets.json
+node_modules/
